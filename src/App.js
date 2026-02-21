@@ -2649,8 +2649,31 @@ function parseVocabulary(text) {
 // --- MAIN APP COMPONENT ---
 export default function App() {
   const [vocabList, setVocabList] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [unknownWords, setUnknownWords] = useState([]);
+
+  // Initialize currentIndex from localStorage
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    try {
+      const saved = localStorage.getItem("vocabMaster_currentIndex");
+      return saved !== null ? parseInt(saved, 10) : 0;
+    } catch (e) {
+      console.error("Failed to read progress from cache", e);
+      return 0;
+    }
+  });
+
+  // Initialize unknownWords from localStorage
+  const [unknownWords, setUnknownWords] = useState(() => {
+    try {
+      const saved = localStorage.getItem("vocabMaster_unknownWords");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error("Failed to read unknown words from cache", e);
+    }
+    return [];
+  });
+
   const [lastAction, setLastAction] = useState(null);
   const [view, setView] = useState("flashcard");
 
@@ -2662,8 +2685,39 @@ export default function App() {
 
   // Parse data on initial load
   useEffect(() => {
-    setVocabList(parseVocabulary(RAW_VOCAB_DATA));
+    const parsed = parseVocabulary(RAW_VOCAB_DATA);
+    setVocabList(parsed);
+
+    // Check if we resumed into a finished state based on cached progress
+    setCurrentIndex((prevIndex) => {
+      if (prevIndex >= parsed.length && parsed.length > 0) {
+        setView("finished");
+        return parsed.length;
+      }
+      return prevIndex;
+    });
   }, []);
+
+  // Sync currentIndex to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem("vocabMaster_currentIndex", currentIndex.toString());
+    } catch (error) {
+      console.error("Failed to save progress", error);
+    }
+  }, [currentIndex]);
+
+  // Sync unknownWords to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "vocabMaster_unknownWords",
+        JSON.stringify(unknownWords)
+      );
+    } catch (error) {
+      console.error("Failed to save study words", error);
+    }
+  }, [unknownWords]);
 
   const currentItem = vocabList[currentIndex];
   const totalWords = vocabList.length;
@@ -2681,10 +2735,10 @@ export default function App() {
         setUnknownWords((prev) => [...prev, currentItem]);
       }
 
+      setCurrentIndex((prev) => prev + 1);
+
       if (currentIndex + 1 >= totalWords) {
         setView("finished");
-      } else {
-        setCurrentIndex((prev) => prev + 1);
       }
 
       // Reset position and exit animation state for the next card
